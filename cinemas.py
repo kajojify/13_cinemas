@@ -1,5 +1,7 @@
 import requests
 import requests.exceptions as reqexc
+import progressbar
+import time
 
 from bs4 import BeautifulSoup
 
@@ -54,13 +56,15 @@ def fetch_afisha_page():
 
 
 def parse_afisha_list(raw_afisha_html, movies_number=10):
+    afisha_list = []
     afisha_soup = BeautifulSoup(raw_afisha_html, "lxml")
     movie_class = "object s-votes-hover-area collapsed"
-    all_movies = afisha_soup.findAll('div', movie_class)
-    for movie in all_movies[:movies_number]:
-        movie_title = movie.find('h3', "usetags").find('a').text
-        theaters_number = len(movie.findAll('td', "b-td-item"))
-        yield (movie_title, theaters_number)
+    all_movie_tags = afisha_soup.findAll('div', movie_class)
+    for movie_tag in all_movie_tags[:movies_number]:
+        movie_title = movie_tag.find('h3', "usetags").find('a').text
+        theaters_number = len(movie_tag.findAll('td', "b-td-item"))
+        afisha_list.append((movie_title, theaters_number))
+    return afisha_list
 
 
 def fetch_movie_info(movie_title, proxy):
@@ -72,30 +76,42 @@ def fetch_movie_info(movie_title, proxy):
                                       proxies={'https': proxy.current})
             movie_soup = BeautifulSoup(movie_page.content, "lxml")
             rating_elem = movie_soup.find('span', "rating_ball")
-            return float(rating_elem.text) if rating_elem else None
+            return float(rating_elem.text) if rating_elem else 0
         except (reqexc.ProxyError, requests.ConnectionError,
                 reqexc.ConnectTimeout, reqexc.ReadTimeout):
             next(proxy)
 
 
 def sort_movies(movies_list):
-    sorted_movies = list(sorted(movies_list, key=lambda x: x[1]))
-    return sorted_movies
+    sorted_movies = sorted(movies_list, key=lambda x: x[1], reverse=True)
+    return list(sorted_movies)
 
 
 def output_movies_to_console(movies):
-    for movie in movies:
-        print(movie)
-
+    print("{:<5}{:<30}{:<20}{:<30}\n".format("№", "Title",
+                                             "Kinopoisk rating",
+                                             "Theaters number"))
+    for movie_number, (title, rate, theaters_number) in enumerate(movies, 1):
+        rate = rate if rate else "No info"
+        print("{:<5}{:<30}{:<20}{:<30}".format(movie_number, title,
+                                               rate, theaters_number))
 
 if __name__ == '__main__':
     movie_list = []
     proxy = Proxy()
     print("Proxies are collected!")
+
+    print("Parsing... Stand by.")
     raw_afisha_page = fetch_afisha_page()
-    print("Parsing... Stand by. ")
-    for title, theaters_number in parse_afisha_list(raw_afisha_page):
-        rate = fetch_movie_info(title, proxy)
-        movie_list.append((title, rate, theaters_number))
+    afisha_list = parse_afisha_list(raw_afisha_page)
+    with progressbar.ProgressBar(max_value=len(afisha_list)) as bar:
+        for number, (title, theaters_number) in enumerate(afisha_list, 1):
+            try:
+                rate = fetch_movie_info(title, proxy)
+            except StopIteration:
+                exit("Proxies are over! Restart the script.")
+            movie_list.append((title, rate, theaters_number))
+            bar.update(number)
+    time.sleep(0.5)
     sorted_movies = sort_movies(movie_list)
     output_movies_to_console(sorted_movies)
