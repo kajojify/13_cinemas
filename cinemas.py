@@ -24,9 +24,12 @@ class Proxy:
 
     def get_all_proxies(self):
         all_proxies = []
-        proxy_page = requests.get(self.proxy_url)
+        user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " \
+                     "Ubuntu Chromium/58.0.3029.81 Chrome/58.0.3029.81 Safari/537.36"
+        proxy_page = requests.get(self.proxy_url,
+                                  headers={'User-Agent':user_agent})
         proxy_soup = BeautifulSoup(proxy_page.content, "lxml")
-        all_proxy_tags = proxy_soup.findAll('td', "tdl")
+        all_proxy_tags = proxy_soup.findAll('td', class_="tdl")
         for proxy_tag in all_proxy_tags:
             ip = proxy_tag.text
             port = proxy_tag.findNext().text
@@ -80,6 +83,7 @@ def fetch_movie_info(movie_title, proxy):
         except (reqexc.ProxyError, requests.ConnectionError,
                 reqexc.ConnectTimeout, reqexc.ReadTimeout):
             next(proxy)
+            print("\nProxy was changed!", end='')
 
 
 def sort_movies(movies_list):
